@@ -1,0 +1,6 @@
+streamlit
+git+https://github.com/openai/whisper.git
+scikit-learn
+pandas
+pillow
+opencv-python

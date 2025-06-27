@@ -1,0 +1,5 @@
+import os
+
+print("Files in data/:", os.listdir("data"))
+
+
