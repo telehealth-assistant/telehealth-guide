@@ -11,7 +11,7 @@ import ffmpeg                                  # audio conversion
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-# ── image‑model imports ─────────────────────────────────────────────
+# image‑model imports
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing import image
 import numpy as np
@@ -34,18 +34,16 @@ df_db, SYMPTOMS, DISEASES = load_disease_db()
 # ────────────────────────────────────────────────────────────────────
 @st.cache_resource
 def load_whisper():
-    return whisper.load_model("base")   # 142 MB
+    return whisper.load_model("base")   # ~142 MB
 
 # ────────────────────────────────────────────────────────────────────
-# 3. Audio → text helper (handles m4a/3gp/aac/ogg/amr)
+# 3. Audio → text helper  (accepts wav/mp3/m4a/3gp/aac/ogg/amr)
 # ────────────────────────────────────────────────────────────────────
 def transcribe(audio_file) -> str:
-    # save original upload
     with NamedTemporaryFile(delete=False, suffix=".input") as tmp_in:
         tmp_in.write(audio_file.read())
         tmp_in.flush()
 
-    # convert to 16‑kHz mono WAV
     with NamedTemporaryFile(delete=False, suffix=".wav") as tmp_out:
         (
             ffmpeg
@@ -56,7 +54,6 @@ def transcribe(audio_file) -> str:
         )
         wav_path = tmp_out.name
 
-    # whisper
     result = load_whisper().transcribe(wav_path, fp16=False)
     return result["text"]
 
@@ -74,17 +71,19 @@ def predict_disease(user_text: str):
     return DISEASES[best_i], SYMPTOMS[best_i], score
 
 # ────────────────────────────────────────────────────────────────────
-# 5.  Image‑model helpers
+# 5.  Image‑model helpers  (auto‑resize to model input)
 # ────────────────────────────────────────────────────────────────────
 @st.cache_resource
 def load_skin_model():
     return load_model("skin_disease_model.h5")   # or .keras
 
 def predict_skin(img_file):
-    img = image.load_img(img_file, target_size=(180, 180))
-    x   = image.img_to_array(img)/255.0
-    x   = np.expand_dims(x, 0)
-    probs   = load_skin_model().predict(x, verbose=0)[0]
+    model = load_skin_model()
+    _, H, W, _ = model.input_shape            # e.g., (None, 224, 224, 3)
+    img = image.load_img(img_file, target_size=(H, W))
+    x   = image.img_to_array(img) / 255.0
+    x   = np.expand_dims(x, 0)                # shape (1, H, W, 3)
+    probs   = model.predict(x, verbose=0)[0]
     classes = ["eczema", "psoriasis", "healthy"]
     idx     = int(np.argmax(probs))
     return classes[idx], float(probs[idx])
@@ -130,3 +129,4 @@ with tab_image:
         st.success(f"🧪 Prediction: **{label}**  (confidence ≈ {conf:.2f})")
 
 # ────────────────────────────────────────────────────────────────────
+
