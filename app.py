@@ -28,26 +28,43 @@ def load_whisper():
 
 # ── 3.  Helper: transcribe uploaded audio to text  ──────────────────
 # Step A: Save original file temporarily (could be m4a, 3gp, etc.)
-with NamedTemporaryFile(delete=False, suffix=".input") as tmp_input:
-    tmp_input.write(audio_file.read())
-    tmp_input.flush()
+import ffmpeg                       # make sure this import is near the top
+from tempfile import NamedTemporaryFile
 
-# Step B: Convert it to WAV using ffmpeg
-with NamedTemporaryFile(delete=False, suffix=".wav") as tmp_wav:
-    try:
-        (
-            ffmpeg
-            .input(tmp_input.name)
-            .output(tmp_wav.name, format='wav', acodec='pcm_s16le', ac=1, ar='16000')
-            .overwrite_output()
-            .run(quiet=True)
-        )
-    except Exception as e:
-        return f"❌ Audio conversion failed: {e}"
+def transcribe(audio_file) -> str:
+    """
+    Converts any uploaded audio format (m4a, 3gp, aac, ogg, wav, mp3, …)
+    into 16‑kHz mono WAV, then runs Whisper transcription.
+    """
+    # ── A. save original upload to a temp file ─────────────────────
+    with NamedTemporaryFile(delete=False, suffix=".input") as tmp_input:
+        tmp_input.write(audio_file.read())
+        tmp_input.flush()
 
-# Step C: Use Whisper on the converted file
-result = load_whisper().transcribe(tmp_wav.name, fp16=False)
-return result["text"]
+    # ── B. convert to WAV using ffmpeg ─────────────────────────────
+    with NamedTemporaryFile(delete=False, suffix=".wav") as tmp_wav:
+        try:
+            (
+                ffmpeg
+                .input(tmp_input.name)
+                .output(
+                    tmp_wav.name,
+                    format="wav",          # output container
+                    acodec="pcm_s16le",    # 16‑bit PCM
+                    ac=1,                  # mono
+                    ar="16000"             # 16 kHz
+                )
+                .overwrite_output()
+                .run(quiet=True)
+            )
+        except Exception as e:
+            # stay inside the function → indent the return!
+            return f"❌ Audio conversion failed: {e}"
+
+    # ── C. run Whisper on the converted WAV ────────────────────────
+    result = load_whisper().transcribe(tmp_wav.name, fp16=False)
+    return result["text"]
+
 
 
 # ── 4.  Helper: find the closest disease using TF-IDF  ──────────────
