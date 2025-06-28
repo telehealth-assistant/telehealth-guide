@@ -79,7 +79,7 @@ with tab_voice:
    audio = st.file_uploader("Upload your voice file", type=["wav", "mp3", "m4a", "3gp", "aac", "ogg", "amr"])
 
 
-    if audio:
+if audio:
         st.audio(audio)
         with st.spinner("Transcribing…"):
             spoken_text = transcribe(audio)
