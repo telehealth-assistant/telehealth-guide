@@ -54,7 +54,7 @@ def transcribe(audio_file) -> str:
         )
         wav_path = tmp_out.name
 
-    result = load_whisper().transcribe(wav_path, task="translate", fp16=False)
+    result = load_whisper().transcribe(wav_path, fp16=False, task="translate")
 
     return result["text"]
 
