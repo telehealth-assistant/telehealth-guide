@@ -1,1 +1,3 @@
 ffmpeg
+libopencore-amrnb0
+libopencore-amrwb0
