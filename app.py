@@ -1,20 +1,19 @@
 # ────────────────────────────────────────────────────────────────────
 # app.py – Tele‑Health assistant: voice symptom + skin‑image analysis
-# Place finAL.xlsx in  data/   and skin_disease_model.h5 next to this file.
+# Requires: finAL.xlsx in /data/ and skin_disease_model.h5 next to this file
 # Run with:  streamlit run app.py
 # ────────────────────────────────────────────────────────────────────
 import streamlit as st
 import pandas as pd
 import whisper
 from tempfile import NamedTemporaryFile
-import ffmpeg                                  # audio conversion
+import ffmpeg
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-
-# image‑model imports
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing import image
 import numpy as np
+import os
 
 # ────────────────────────────────────────────────────────────────────
 # 1. Load disease table from Excel
@@ -37,7 +36,7 @@ def load_whisper():
     return whisper.load_model("base")   # ~142 MB
 
 # ────────────────────────────────────────────────────────────────────
-# 3. Audio → text helper  (accepts wav/mp3/m4a/3gp/aac/ogg/amr)
+# 3. Audio → text translation (any language → English)
 # ────────────────────────────────────────────────────────────────────
 def transcribe(audio_file) -> str:
     with NamedTemporaryFile(delete=False, suffix=".input") as tmp_in:
@@ -55,11 +54,10 @@ def transcribe(audio_file) -> str:
         wav_path = tmp_out.name
 
     result = load_whisper().transcribe(wav_path, fp16=False, task="translate")
-
     return result["text"]
 
 # ────────────────────────────────────────────────────────────────────
-# 4. Text → likely disease using TF‑IDF
+# 4. TF‑IDF matching for symptom → likely disease
 # ────────────────────────────────────────────────────────────────────
 def predict_disease(user_text: str):
     corpus = SYMPTOMS + [user_text.lower()]
@@ -72,37 +70,42 @@ def predict_disease(user_text: str):
     return DISEASES[best_i], SYMPTOMS[best_i], score
 
 # ────────────────────────────────────────────────────────────────────
-# 5.  Image‑model helpers  (auto‑resize to model input)
+# 5.  Image prediction helpers
 # ────────────────────────────────────────────────────────────────────
 @st.cache_resource
 def load_skin_model():
-    return load_model("skin_disease_model.h5")   # or .keras
+    return load_model("skin_disease_model.h5")
+
+@st.cache_data
+def get_class_names():
+    class_dir = "skin_cnn_trainer/train"
+    names = [d for d in os.listdir(class_dir) if os.path.isdir(os.path.join(class_dir, d))]
+    names.sort()
+    return names
 
 def predict_skin(img_file):
     model = load_skin_model()
-    _, H, W, _ = model.input_shape            # e.g., (None, 224, 224, 3)
+    class_names = get_class_names()
+    _, H, W, _ = model.input_shape
     img = image.load_img(img_file, target_size=(H, W))
     x   = image.img_to_array(img) / 255.0
-    x   = np.expand_dims(x, 0)                # shape (1, H, W, 3)
-    probs   = model.predict(x, verbose=0)[0]
-    classes = ["eczema", "psoriasis", "healthy"]
-    idx     = int(np.argmax(probs))
-    return classes[idx], float(probs[idx])
+    x   = np.expand_dims(x, 0)
+    probs = model.predict(x, verbose=0)[0]
+    idx   = int(np.argmax(probs))
+    return class_names[idx], float(probs[idx])
 
 # ────────────────────────────────────────────────────────────────────
-# 6.  Streamlit UI
+# 6. Streamlit UI
 # ────────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Rural Tele‑Health Assistant", layout="centered")
 st.title("🩺 Rural Tele‑Health AI Assistant")
 
-tab_voice, tab_image = st.tabs(["🎙️ Voice Input", "📷 Skin Image"])
+tab_voice, tab_image = st.tabs(["🎙️ Voice Input", "📷 Skin Image"])
 
-# ---- Voice tab ----
+# Voice tab
 with tab_voice:
-    audio = st.file_uploader(
-        "Upload or record your voice (wav/mp3/m4a/3gp/aac/ogg/amr)",
-        type=["wav", "mp3", "m4a", "3gp", "aac", "ogg", "amr"]
-    )
+    audio = st.file_uploader("Upload your voice (wav/mp3/m4a/3gp/aac/ogg/amr)",
+                              type=["wav", "mp3", "m4a", "3gp", "aac", "ogg", "amr"])
     if audio:
         st.audio(audio)
         with st.spinner("Transcribing…"):
@@ -115,19 +118,14 @@ with tab_voice:
         if matched:
             st.caption("Matched symptom pattern: " + matched)
 
-        st.markdown(
-            "[💬 Click to consult a doctor](https://meet.google.com/test-link)",
-            unsafe_allow_html=True
-        )
+        st.markdown("[💬 Click to consult a doctor](https://meet.google.com/test-link)", unsafe_allow_html=True)
 
-# ---- Image tab ----
+# Image tab
 with tab_image:
     img = st.file_uploader("Upload a skin image (JPG / PNG)", type=["jpg", "png"])
     if img:
         st.image(img, caption="Uploaded image", use_container_width=True)
         with st.spinner("Analyzing image…"):
             label, conf = predict_skin(img)
-        st.success(f"🧪 Prediction: **{label}**  (confidence ≈ {conf:.2f})")
-
-# ────────────────────────────────────────────────────────────────────
+        st.success(f"🧪 Prediction: **{label}**  (confidence ≈ {conf:.2f})")
 
