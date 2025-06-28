@@ -54,7 +54,8 @@ def transcribe(audio_file) -> str:
         )
         wav_path = tmp_out.name
 
-    result = load_whisper().transcribe(wav_path, fp16=False)
+    result = load_whisper().transcribe(wav_path, task="translate", fp16=False)
+
     return result["text"]
 
 # ────────────────────────────────────────────────────────────────────
@@ -123,7 +124,7 @@ with tab_voice:
 with tab_image:
     img = st.file_uploader("Upload a skin image (JPG / PNG)", type=["jpg", "png"])
     if img:
-        st.image(img, caption="Uploaded image", use_column_width=True)
+        st.image(img, caption="Uploaded image", use_container_width=True)
         with st.spinner("Analyzing image…"):
             label, conf = predict_skin(img)
         st.success(f"🧪 Prediction: **{label}**  (confidence ≈ {conf:.2f})")
