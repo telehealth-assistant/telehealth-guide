@@ -27,12 +27,28 @@ def load_whisper():
     return whisper.load_model("base")            # ~142 MB
 
 # ── 3.  Helper: transcribe uploaded audio to text  ──────────────────
-def transcribe(audio_file) -> str:
-    with NamedTemporaryFile(delete=True, suffix=".wav") as tmp:
-        tmp.write(audio_file.read())
-        tmp.flush()
-        result = load_whisper().transcribe(tmp.name, fp16=False)
-    return result["text"]
+# Step A: Save original file temporarily (could be m4a, 3gp, etc.)
+with NamedTemporaryFile(delete=False, suffix=".input") as tmp_input:
+    tmp_input.write(audio_file.read())
+    tmp_input.flush()
+
+# Step B: Convert it to WAV using ffmpeg
+with NamedTemporaryFile(delete=False, suffix=".wav") as tmp_wav:
+    try:
+        (
+            ffmpeg
+            .input(tmp_input.name)
+            .output(tmp_wav.name, format='wav', acodec='pcm_s16le', ac=1, ar='16000')
+            .overwrite_output()
+            .run(quiet=True)
+        )
+    except Exception as e:
+        return f"❌ Audio conversion failed: {e}"
+
+# Step C: Use Whisper on the converted file
+result = load_whisper().transcribe(tmp_wav.name, fp16=False)
+return result["text"]
+
 
 # ── 4.  Helper: find the closest disease using TF-IDF  ──────────────
 def predict_disease(user_text: str):
@@ -53,7 +69,7 @@ tab_voice, tab_image = st.tabs(["🎙️  Voice Input", "📷  Image (optional)"
 
 # ---- Voice tab ----
 with tab_voice:
-    audio = st.file_uploader("Upload or record your voice (WAV / MP3)", type=["wav", "mp3"])
+    audio = st.file_uploader("Upload your voice file", type=["wav", "mp3", "m4a", "3gp", "aac", "ogg"])
     if audio:
         st.audio(audio)
         with st.spinner("Transcribing…"):
